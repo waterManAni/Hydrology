@@ -13,4 +13,4 @@ set Calibrate="%cd%\Calibrate.py"
 call  %Condaactivate% %environment%
 
 
-python %Calibrate% %stm% %catg% %StartKc% %EndKc% %Kcsteps% %StartIL% %EndIL% %ILsteps% %StartCL% %EndCL% %CLsteps%
+python %Calibrate% %stm% %catg% %StartKc% %EndKc% %Kcsteps% %StartIL% %EndIL% %ILsteps% %StartCL% %EndCL% %CLsteps% %RORB%

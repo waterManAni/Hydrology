@@ -100,13 +100,15 @@ def getinputs ():
     StartCL=float(sys.argv[9])
     EndCL=float(sys.argv[10])
     CLsteps=float(sys.argv[11])
-    return origstm, Catg, StartKc,EndKc,Kcsteps,StartIL,EndIL,ILsteps,StartCL,EndCL,CLsteps
+    RORB=sys.argv[12]
+    return origstm, Catg, StartKc,EndKc,Kcsteps,StartIL,EndIL,ILsteps,StartCL,EndCL,CLsteps,RORB
 
-origstm,Catg,StartKc,EndKc,Kcsteps,StartIL,EndIL,ILsteps,StartCL,EndCL,CLsteps= getinputs()
+origstm,Catg,StartKc,EndKc,Kcsteps,StartIL,EndIL,ILsteps,StartCL,EndCL,CLsteps,RORB= getinputs()
 
 curpath=(os.path.split(origstm))[0]
 plotdir= os.path.join (curpath,'plots')
 curpythondirectory = os.path.dirname(os.path.realpath(__file__))
+print (curpythondirectory)
 
 parsample= os.path.join (curpythondirectory, 'Sample.par')
 catgname= os.path.splitext((os.path.split (Catg))[1])[0]
@@ -139,7 +141,7 @@ for CL10 in CL10s:
                  i=i+1
                  print ('Running: ', str (i), ' of ',totalruns )
                  temppar,outfile,tempstm,Filen =tempfiles (curpath,origstm,parsample,IL,CL,Kc)
-                 os.system('RORB_CMD.exe'+' "'+temppar+'"')
+                 os.system(RORB+' "'+temppar+'"')
                  os.remove (temppar) #delete the parameter file created
                  os.remove (tempstm)
                  hydrographs= read_hydrograph (outfile)
