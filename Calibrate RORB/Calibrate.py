@@ -4,6 +4,14 @@ import pandas as pdd
 from matplotlib import pyplot as plt
 import math
 import sys
+from PyHMA import HMA
+import numpy as np
+
+def hydrographmatch(qoA, qsA,time_scale,lag_allowed,lead_allowed,plotyn):
+    hA = HMA(qoA, qsA, b=time_scale, max_lag=lag_allowed, max_lead=lead_allowed, measure='nse', keep_internals=False, calc_rays=False)
+    fsim = hA.calc_dense2()
+    #dense =high ram usage, orig= medium ram usage, dense2= no internals and ray plotting allowed
+    return fsim
 
 def read_hydrograph (outfile):
     lines = []
@@ -13,7 +21,7 @@ def read_hydrograph (outfile):
     for i in range (0, len (lines)):
         if lines[i].find ('Hydrograph summary')>0:
             brk= i
-    hydrograph = lines[brk+8:]
+    hydrograph = lines[brk+7:]
     hydcln=[]
     for h in hydrograph:
         clnline=h.replace('  ',' ')
@@ -23,28 +31,41 @@ def read_hydrograph (outfile):
     hydrographframe=pdd.DataFrame(hydcln,columns=['text'])
     hydrographframe = hydrographframe['text'].str.split(' ', expand=True)
     hydrographframe = hydrographframe.replace('\n','', regex=True)
-    hydrographframe =hydrographframe.iloc [:,2:6]
+    hydrographframe =hydrographframe.iloc [:,2:5]
     hydrographframe.columns = hydrographframe.iloc[0]
     hydrographframe = (hydrographframe.drop(0)).reset_index (drop=True)
     columnames= hydrographframe.head()
     for c in columnames:
         hydrographframe [c]= hydrographframe[c].astype('float')
+    # print (hydrographframe)
     return hydrographframe
 
 def rmse (observed, calculated):
-    ms=0.0001
-    for i in range(len (observed)):
-            ms = ms + (observed[i]-calculated[i])*(observed[i]-calculated[i])
-    return math.sqrt(ms/(len (observed)))
+    ms=np.square(np.subtract(observed, calculated)).mean()
+    return ms
 
-def plotflows (time, obs, calc,Filen, rmse):
-    fig= plt.figure()
-    plt.xlabel ('Time')
+def sig_places(value):
+   return ('{:g}'.format(float('{:.1g}'.format(value))))
+
+def plotflow (time,qsA,qoA,Filen,rmse,hmindex):
+    fig=plt.figure()
+    ax = fig.add_subplot(111)
+    #plot simulated
+    plt.plot (time,qsA,label='Modelled',color='red')
+    spy,spx= np.amax(qsA),time[np.where(qsA==np.amax(qsA))][0]
+    ax.axvline(spx, color='red',linestyle='-.',alpha=0.3)
+    ax.axhline(spy, color='red',linestyle='-.',alpha=0.3)
+    #plot observed
+    plt.plot (time,qoA,label='Observed',color='black')
+    opy,opx= np.amax(qoA),time[np.where(qoA==np.amax(qoA))][0]
+    ax.axvline(opx, color='black',linestyle='-.',alpha=0.3)
+    ax.axhline(opy, color='black',linestyle='-.',alpha=0.3)
+    
+
+    plt.legend(loc='right')
+    plt.xlabel ('Time (hours)')
     plt.ylabel ('Q (m3/s)')
-    plt.title ('IL: '+str(IL)+ ', CL: '+str(CL)+', Kc: '+str(Kc)+', RMSE= '+str(int(rmse)), loc='center')
-    plt.plot (x,y1, label = 'Calculated')
-    plt.plot (x,y2, label = 'Actual')
-    plt.legend (loc='best')
+    plt.gca().set_title ('IL: '+str(IL)+ ', CL: '+str(CL)+', Kc: '+str(Kc)+'       RMSE/Peak= '+str(int(round(rms/opy,0))) +', Match: '+str(int(round(hmindex*100,0)))+'%',loc='left')
     outfig= os.path.join (plotdir,Filen+'.jpg')
     fig.savefig(outfig,bbox_inches="tight")
     plt.close ('all')
@@ -85,8 +106,12 @@ origstm,Catg,StartKc,EndKc,Kcsteps,StartIL,EndIL,ILsteps,StartCL,EndCL,CLsteps= 
 
 curpath=(os.path.split(origstm))[0]
 plotdir= os.path.join (curpath,'plots')
-parsample= r'T:\animesh.paudel\Python\RORB_Calibrate\Sample.par'
+curpythondirectory = os.path.dirname(os.path.realpath(__file__))
+
+parsample= os.path.join (curpythondirectory, 'Sample.par')
 catgname= os.path.splitext((os.path.split (Catg))[1])[0]
+os.chdir(curpythondirectory)
+
 try: 
     os.mkdir(plotdir)
 except: 
@@ -99,14 +124,11 @@ CL10s=[*range(int(StartCL*10),int(EndCL*10)+int(CLsteps*10),int(CLsteps*10))]
 KCs=[*range(StartKc,EndKc+Kcsteps,Kcsteps)]
 totalruns=str(len(ILs)*len (CL10s)*len(KCs))
 
-curpythondirectory= r'T:\animesh.paudel\Python\RORB_Calibrate'
-os.chdir(curpythondirectory)
-
 
 lines = []
 with open(parsample) as samp:
     lines = samp.read()
-errorstat = pdd.DataFrame(columns=['IL','CL','Kc','RMSE'])
+errorstat = pdd.DataFrame(columns=['IL','CL','Kc','RMSE','MatchIndex'])
 
 
 i=0
@@ -121,12 +143,15 @@ for CL10 in CL10s:
                  os.remove (temppar) #delete the parameter file created
                  os.remove (tempstm)
                  hydrographs= read_hydrograph (outfile)
-                 y1 =hydrographs['Hyd001'].to_list()
-                 y2=hydrographs['Hyd002'].to_list()
-                 x=hydrographs['Time'].to_list()
-                 rms = rmse(y2, y1)
-                 errorstat.loc[len(errorstat)] = [IL,CL,Kc,rms]
-                 plotflows (x,y2,y1,Filen,rms)
+                 time = hydrographs ['Time'].to_numpy()
+                 qsA =hydrographs['Hyd001'].to_numpy()
+                 # qsA[qsA == 0] = 0.01
+                 qoA=hydrographs['Hyd002'].to_numpy()
+                 # qoA[qoA == 0] = 0.01
+                 rms = rmse(qoA, qsA)
+                 hA = hydrographmatch(qoA, qsA, 4, 50, 50,'y')
+                 errorstat.loc[len(errorstat)] = [IL,CL,Kc,round(rms,0),round(hA,3)]
+                 plotflow(time,qsA,qoA, Filen,rms, hA)
 
          
 

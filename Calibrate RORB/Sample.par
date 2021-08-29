@@ -5,7 +5,7 @@ Lumped kc:T
 Verbosity:3
 Lossmodel:1
 Num ISA  :2
-ISA 1    :Kc,0.7
+ISA 1    :Kc,0.8
 Num burst:1
 ISA 1    :IL,CL
 ISA 2    :IL,CL
